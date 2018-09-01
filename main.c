@@ -30,16 +30,6 @@ static void ws_handler(struct mg_connection *c, int ev, void *arg, void *ud) {
       while (len > 0 && wm->data[len - 1] != '}') len--;
       printf("WS <-: %d [%.*s]\n", len, len, (char *) wm->data);
       jsonrpc_ctx_process(pd->ctx, (char *) wm->data, len);
-
-      // char *buf = NULL;
-      // struct mjson_out out = MJSON_OUT_DYNAMIC_BUF(&buf);
-      // jsonrpc_ctx_process(pd->ctx, wm->data, len);
-      // if (buf != NULL && strlen(buf) > 0) {
-      //   mg_printf_websocket_frame(c, WEBSOCKET_OP_TEXT, "%s", buf);
-      // }
-      // printf("GOT RPC: [%.*s] -> [%s]\n", len, wm->data, buf ? buf :
-      // "(null)"); free(buf);
-
       break;
     }
     case MG_EV_CLOSE:
