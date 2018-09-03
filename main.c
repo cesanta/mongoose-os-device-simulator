@@ -88,11 +88,20 @@ int mg_ssl_if_mbed_random(void *ctx, unsigned char *buf, size_t len) {
   return 0;
 }
 
-static int echo(char *in, int in_sz, struct mjson_out *out, void *ud) {
-  if (in_sz == 0 || (in_sz == 2 && in[0] == '"' && in[1] == '"')) {
-    mjson_printf(out, "%Q", "empty input. give me params!");
+// Shadow.Delta callback. Sets reported = desired.
+static int delta_cb(char *in, int in_sz, struct mjson_out *out, void *ud) {
+  const char *p = NULL;
+  int len = 0;
+  mjson_find(in, in_sz, "$.state", &p, &len);
+  if (p != NULL && len > 0) {
+    char *frame = NULL;
+    struct mjson_out tmp = MJSON_OUT_DYNAMIC_BUF(&frame);
+    mjson_printf(&tmp, "{%Q:%Q,%Q:{%Q:{%Q:%.*s}}}", "method",
+                 "Dash.Shadow.Update", "params", "state", "reported", len, p);
+    if (frame != NULL) jsonrpc_notify(frame, strlen(frame));
+    free(frame);
   } else {
-    mjson_printf(out, "%.*s", in_sz, in);
+    mjson_printf(out, "{%Q:%Q}", "error", "expecting {state:{...}}");
   }
   (void) ud;
   return 0;
@@ -127,7 +136,7 @@ int main(int argc, char *argv[]) {
   if (version == NULL) version = "1.0.0";
   if (pass == NULL) pass = prompt(buf, sizeof(buf), "Enter access token:");
 
-  jsonrpc_ctx_export(&jsonrpc_default_context, "echo", echo, NULL);
+  jsonrpc_ctx_export(&jsonrpc_default_context, "Shadow.Delta", delta_cb, NULL);
   for (;;) poll(&jsonrpc_default_context, url, version, pass);
 
   return EXIT_SUCCESS;
