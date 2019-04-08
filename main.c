@@ -9,6 +9,9 @@
 #define ORIGIN "Origin: https://mongoose-os.com\r\n"
 #define RECONNECTION_INTERVAL_SECONDS 3.0
 
+static const char *url = NULL, *version = NULL, *pass = NULL,
+                  *mac = "aabbccddeeff";
+
 struct privdata {
   struct mg_mgr mgr;
   struct mg_connection *c;
@@ -56,8 +59,7 @@ static int ws_sender(const char *buf, int len, void *privdata) {
   return len;
 }
 
-static void poll(struct jsonrpc_ctx *ctx, const char *url, const char *version,
-                 const char *token) {
+static void poll(struct jsonrpc_ctx *ctx, const char *url, const char *token) {
   struct privdata *pd = (struct privdata *) ctx->userdata;
   // printf("pollin %p %p...\n", pd, pd ? pd->c : NULL);
   if (pd == NULL) {
@@ -67,7 +69,7 @@ static void poll(struct jsonrpc_ctx *ctx, const char *url, const char *version,
 #endif
     pd->ctx = ctx;
     mg_mgr_init(&pd->mgr, pd);
-    jsonrpc_init(ws_sender, NULL, pd, version);
+    jsonrpc_init(ws_sender, NULL, pd);
   }
   if (pd == NULL) {
     printf("OOM %d bytes\n", (int) sizeof(*pd));
@@ -98,6 +100,16 @@ static void delta_cb(struct jsonrpc_request *r) {
   }
 }
 
+static void config_get_cb(struct jsonrpc_request *r) {
+  jsonrpc_return_success(r, "{%Q:{%Q:%Q}}", "dash", "token", pass);
+}
+
+static void info_cb(struct jsonrpc_request *r) {
+  jsonrpc_return_success(r, "{%Q:%Q, %Q:%Q, %Q:%Q, %Q:%Q, %Q:%Q}", "fw_version",
+                         version, "arch", "posix", "fw_id",
+                         __DATE__ " " __TIME__, "app", "simulator", "mac", mac);
+}
+
 static char *prompt(char *buf, size_t len, const char *msg) {
   printf("%s ", msg);
   fflush(stdout);
@@ -110,7 +122,6 @@ static char *prompt(char *buf, size_t len, const char *msg) {
 }
 
 int main(int argc, char *argv[]) {
-  const char *url = NULL, *version = NULL, *pass = NULL;
   char buf[100];
 
   for (int i = 1; i < argc; i++) {
@@ -118,6 +129,8 @@ int main(int argc, char *argv[]) {
       url = argv[++i];
     } else if (strcmp(argv[i], "-v") == 0) {
       version = argv[++i];
+    } else if (strcmp(argv[i], "-m") == 0) {
+      mac = argv[++i];
     } else if (strcmp(argv[i], "-t") == 0) {
       pass = argv[++i];
     }
@@ -128,7 +141,9 @@ int main(int argc, char *argv[]) {
   if (pass == NULL) pass = prompt(buf, sizeof(buf), "Enter access token:");
 
   jsonrpc_export("Shadow.Delta", delta_cb, NULL);
-  for (;;) poll(&jsonrpc_default_context, url, version, pass);
+  jsonrpc_export("Config.Get", config_get_cb, NULL);
+  jsonrpc_export("Sys.GetInfo", info_cb, NULL);
+  for (;;) poll(&jsonrpc_default_context, url, pass);
 
   return EXIT_SUCCESS;
 }
